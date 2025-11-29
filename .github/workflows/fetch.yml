@@ -1,11 +1,13 @@
+# .github/workflows/fetch.yml
 name: chess-fetch
+
 on:
   schedule:
     - cron: '0 1 * * *'  # daily at 01:00 UTC
   workflow_dispatch:
 
 permissions:
-  contents: write  # to allow committing state.json back
+  contents: write  # allow committing state.json back to the repo
 
 jobs:
   fetch:
@@ -27,13 +29,23 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run fetcher
+        # Provide secrets & runtime config via environment variables
         env:
-          MAKE_WEBHOOK: MYSUPERSECRET789
+          # Required: set these secrets in GitHub repo settings (Settings → Secrets and variables → Actions)
+          MAKE_WEBHOOK: ${{ secrets.MAKE_WEBHOOK }}
+          MAKE_SECRET: ${{ secrets.MAKE_SECRET }}
+          CHESS_USERNAMES: ${{ secrets.CHESS_USERNAMES }}
+
+          # Politeness and retry tuning (optional overrides)
           CHESS_REQUEST_DELAY: "1.0"
           CHESS_MAX_RETRIES: "3"
           STATE_FILE: "state.json"
+
+          # Optional: set to "1" to send legacy array-of-arrays instead of objects
+          # MAKE_SEND_AS_ARRAY_OF_ARRAYS: ${{ secrets.MAKE_SEND_AS_ARRAY_OF_ARRAYS }}
         run: |
           echo "Running fetch_and_post.py for usernames from secret CHESS_USERNAMES"
+          # The script accepts a CLI argument or falls back to CHESS_USERNAMES env var.
           python fetch_and_post.py "${{ secrets.CHESS_USERNAMES }}"
 
       - name: Commit updated state.json
