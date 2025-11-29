@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-fetch_and_post.py
-Fetch new Chess.com archives for a list of usernames, batch game rows, and POST to Make webhook.
-Designed to run in GitHub Actions on schedule.
+fetch_and_post.py (updated)
+
+Sends Chess.com archive games to a Make webhook as an array-of-objects suitable
+for Google Sheets -> Bulk Add Rows (Advanced).
 
 Usage:
   MAKE_WEBHOOK (env) must contain the full Make webhook URL.
   MAKE_SECRET (env, optional) contains a secret token to sign the webhook (X-Hook-Token).
-  Optionally override USER_AGENT via env MAKE_USER_AGENT.
-  Run locally: MAKE_WEBHOOK="https://hooks.make.com/xxxx" MAKE_SECRET="s3cret" python fetch_and_post.py "konduvinay,anotheruser"
+  MAKE_SEND_AS_ARRAY_OF_ARRAYS (env, optional) set to "1" to keep legacy array-of-arrays payload.
+  Run: python fetch_and_post.py "konduvinay,anotheruser"
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import requests
 from pathlib import Path
 from datetime import datetime
 from dateutil import tz
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 # === Config ===
 DEFAULT_USER_AGENT = "ChessAnalytics/1.0 (+your-email@example.com)"
@@ -32,11 +33,15 @@ STATE_FILE = os.environ.get("STATE_FILE", "state.json")
 MAKE_WEBHOOK = os.environ.get("MAKE_WEBHOOK")
 MAKE_SECRET = os.environ.get("MAKE_SECRET")  # optional header token
 
-# Safety checks
-if not MAKE_WEBHOOK:
-    # allow running locally for testing but abort when used in production without webhook
-    print("WARNING: MAKE_WEBHOOK not set. The script will run but will not POST to Make.")
-    # We still continue to allow dry runs.
+# Optional flag for backwards-compatible payload (array-of-arrays)
+LEGACY_ARRAYS = os.environ.get("MAKE_SEND_AS_ARRAY_OF_ARRAYS", "") == "1"
+
+# Column headers (must match your Google Sheet headers exactly, A..M)
+SHEET_COLS = [
+    "ingest_time", "username", "archive_url", "game_url", "time_control",
+    "end_time_utc", "date_ymd", "white_username", "white_rating",
+    "black_username", "black_rating", "result", "pgn"
+]
 
 # === Helpers ===
 def load_state() -> Dict[str, List[str]]:
@@ -47,7 +52,7 @@ def load_state() -> Dict[str, List[str]]:
         text = p.read_text(encoding="utf-8")
         return json.loads(text or "{}")
     except Exception as e:
-        print(f"Failed to read {STATE_FILE}: {e} — starting from empty state")
+        print(f"[WARN] Failed to read {STATE_FILE}: {e} — starting from empty state")
         return {}
 
 def save_state(state: Dict[str, List[str]]) -> None:
@@ -91,10 +96,11 @@ def safe_get_json(url: str) -> Any:
     raise RuntimeError(f"Failed to GET {url} after {MAX_RETRIES} retries")
 
 def convert_game_to_row(username: str, archive_url: str, game: Dict[str, Any]) -> List[Any]:
-    # Convert epoch seconds to ISO UTC
+    """
+    Legacy: convert game to a list (array-of-arrays).
+    """
     end_time = game.get("end_time")
     if end_time:
-        # chess.com end_time is seconds since epoch
         dt = datetime.utcfromtimestamp(int(end_time))
         end_time_iso = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         date_ymd = dt.strftime("%Y-%m-%d")
@@ -119,20 +125,35 @@ def convert_game_to_row(username: str, archive_url: str, game: Dict[str, Any]) -
     ]
     return row
 
+def convert_game_to_obj(username: str, archive_url: str, game: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert game to object keyed by SHEET_COLS for Bulk Add Rows (Advanced).
+    Keys must match sheet headers exactly.
+    """
+    row = convert_game_to_row(username, archive_url, game)
+    obj = {SHEET_COLS[i]: row[i] for i in range(len(SHEET_COLS))}
+    return obj
+
 def post_to_make(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    POST the payload to Make webhook. If MAKE_WEBHOOK not set -> dry-run print.
+    """
     if not MAKE_WEBHOOK:
-        print("Dry-run mode: MAKE_WEBHOOK not set. Would have posted payload:")
-        print(json.dumps(payload, indent=2, ensure_ascii=False)[:2000])  # truncated print
+        print("[DRY RUN] MAKE_WEBHOOK not set. Payload (truncated):")
+        print(json.dumps(payload, indent=2, ensure_ascii=False)[:4000])
         return {"dry_run": True}
+
     headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     if MAKE_SECRET:
         headers["X-Hook-Token"] = MAKE_SECRET
-    r = requests.post(MAKE_WEBHOOK, json=payload, headers=headers, timeout=60)
+
+    r = requests.post(MAKE_WEBHOOK, json=payload, headers=headers, timeout=120)
     r.raise_for_status()
+    # Try to decode JSON response, otherwise return minimal info
     try:
         return r.json()
     except Exception:
-        return {"status": "ok", "http_status": r.status_code}
+        return {"status": "ok", "http_status": r.status_code, "text": r.text[:200]}
 
 # === Main logic ===
 def fetch_and_post(usernames_csv: str) -> None:
@@ -155,7 +176,7 @@ def fetch_and_post(usernames_csv: str) -> None:
             for archive in new_archives:
                 try:
                     print(f"\nFetching archive: {archive}")
-                    time.sleep(DELAY)  # be polite between requests
+                    time.sleep(DELAY)  # polite delay
                     archive_json = safe_get_json(archive)
                     games = archive_json.get("games", []) or []
                     if not games:
@@ -164,14 +185,21 @@ def fetch_and_post(usernames_csv: str) -> None:
                         save_state(state)
                         continue
 
-                    rows = [convert_game_to_row(username, archive, g) for g in games]
+                    if LEGACY_ARRAYS:
+                        # legacy: array-of-arrays (rows as lists)
+                        rows_payload = [convert_game_to_row(username, archive, g) for g in games]
+                    else:
+                        # preferred: array-of-objects for Bulk Add Rows (Advanced)
+                        rows_payload = [convert_game_to_obj(username, archive, g) for g in games]
+
                     payload = {
                         "username": username,
                         "archive_url": archive,
-                        "game_count": len(rows),
-                        "rows": rows
+                        "game_count": len(rows_payload),
+                        "rows": rows_payload
                     }
-                    print(f"Posting {len(rows)} rows to Make webhook (single batch payload)")
+
+                    print(f"Posting payload with {len(rows_payload)} rows to Make webhook (single batch).")
                     resp = post_to_make(payload)
                     print("Make response (truncated):", str(resp)[:400])
 
@@ -181,16 +209,15 @@ def fetch_and_post(usernames_csv: str) -> None:
 
                 except Exception as e:
                     # Log but continue with next archive/username
-                    print(f"ERROR processing archive {archive}: {e}")
-                    # Optionally: do not mark processed so it'll be retried next run
+                    print(f"[ERROR] processing archive {archive}: {e}")
+                    # Do not mark processed -> will be retried next run
                     continue
 
-                # small polite delay before next archive
+                # polite delay before next archive
                 time.sleep(DELAY)
 
         except Exception as e:
-            print(f"ERROR checking archives for {username}: {e}")
-            # continue with next username
+            print(f"[ERROR] checking archives for {username}: {e}")
             continue
 
     print("\nAll done. State saved to", STATE_FILE)
