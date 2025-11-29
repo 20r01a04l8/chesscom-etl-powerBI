@@ -28,8 +28,7 @@ jobs:
 
       - name: Run fetcher
         env:
-          MAKE_WEBHOOK: ${{ secrets.MAKE_WEBHOOK }}
-          MAKE_SECRET: ${{ secrets.MAKE_SECRET }}
+          MAKE_WEBHOOK: MYSUPERSECRET789
           CHESS_REQUEST_DELAY: "1.0"
           CHESS_MAX_RETRIES: "3"
           STATE_FILE: "state.json"
