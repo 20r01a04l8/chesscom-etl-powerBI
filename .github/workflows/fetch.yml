@@ -1,0 +1,54 @@
+name: chess-fetch
+on:
+  schedule:
+    - cron: '0 1 * * *'  # daily at 01:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write  # to allow committing state.json back
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fetcher
+        env:
+          MAKE_WEBHOOK: ${{ secrets.MAKE_WEBHOOK }}
+          MAKE_SECRET: ${{ secrets.MAKE_SECRET }}
+          CHESS_REQUEST_DELAY: "1.0"
+          CHESS_MAX_RETRIES: "3"
+          STATE_FILE: "state.json"
+        run: |
+          echo "Running fetch_and_post.py for usernames from secret CHESS_USERNAMES"
+          python fetch_and_post.py "${{ secrets.CHESS_USERNAMES }}"
+
+      - name: Commit updated state.json
+        env:
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
+          git add state.json || true
+          # Only commit if changed
+          if ! git diff --staged --quiet --exit-code; then
+            git commit -m "Update processed archives (actions)" || true
+            git push || true
+          else
+            echo "No changes to commit"
+          fi
