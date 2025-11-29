@@ -223,7 +223,17 @@ def fetch_and_post(usernames_csv: str) -> None:
     print("\nAll done. State saved to", STATE_FILE)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python fetch_and_post.py 'username1,username2'")
+# Prefer command-line argument, otherwise use env CHESS_USERNAMES (used in GitHub Actions)
+    if len(sys.argv) >= 2 and sys.argv[1].strip():
+        usernames_arg = sys.argv[1]
+    else:
+        usernames_arg = os.environ.get("CHESS_USERNAMES", "").strip()
+
+    if not usernames_arg:
+        print("No usernames provided. Provide usernames as a CLI arg or set the CHESS_USERNAMES env var.")
+        print("Examples:")
+        print('  python fetch_and_post.py "konduvinay"')
+        print('  CHESS_USERNAMES="konduvinay,anotheruser" python fetch_and_post.py ""')
         sys.exit(1)
-    fetch_and_post(sys.argv[1])
+
+    fetch_and_post(usernames_arg)
