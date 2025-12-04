@@ -1,0 +1,41 @@
+name: Debug - Check SA secret
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug-secret:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check secret present (debug only)
+        shell: bash
+        env:
+          SA_B64: ${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}
+        run: |
+          # safely check without printing the secret value
+          if [ -z "$SA_B64" ]; then
+            echo "SECRET MISSING"
+            exit 1
+          else
+            echo "SECRET EXISTS and has non-zero length"
+          fi
+
+      - name: Decode service account secret to file (safe)
+        shell: bash
+        env:
+          SA_B64: ${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}
+        run: |
+          if [ -z "$SA_B64" ]; then
+            echo "GSPREAD_SERVICE_ACCOUNT_JSON_B64 is empty - ensure secret is set (not available to fork PRs)."
+            exit 1
+          fi
+          echo "$SA_B64" | base64 --decode > sa.json
+          if ! grep -q '"client_email"' sa.json; then
+            echo "Decoded file does not look like a service account JSON (missing client_email)."
+            exit 1
+          fi
+          echo "Decoded service account key to sa.json (runner only)."
