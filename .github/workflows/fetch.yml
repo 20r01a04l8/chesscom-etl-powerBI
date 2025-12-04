@@ -66,16 +66,30 @@ jobs:
             git commit -m "chore(state): add initial ${STATE_FILE}" || true
             git push origin HEAD || true
           fi
-
-      - name: Decode service account secret
-        # writes decoded JSON to ./sa.json for the script
-        run: |
-          if [ -z "${{ env.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" ]; then
-            echo "GSPREAD_SERVICE_ACCOUNT_JSON_B64 is empty - ensure secret is set"
-            exit 1
-          fi
-          echo "${{ env.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" | base64 --decode > sa.json
+      - name: Debug - check secret presence (safe)
         shell: bash
+        run: |
+              if [ -z "${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" ]; then
+                echo "DEBUG: secret GSPREAD_SERVICE_ACCOUNT_JSON_B64 is EMPTY"
+                exit 1
+              fi
+              len=$(printf '%s' "${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" | wc -c)
+              echo "DEBUG: secret GSPREAD_SERVICE_ACCOUNT_JSON_B64 exists; length=$len"
+
+      - name: Decode service account secret to file
+        shell: bash
+        run: |
+            if [ -z "${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" ]; then
+              echo "GSPREAD_SERVICE_ACCOUNT_JSON_B64 is empty - ensure secret is set (not available to fork PRs)."
+              exit 1
+            fi
+            printf '%s' "${{ secrets.GSPREAD_SERVICE_ACCOUNT_JSON_B64 }}" | base64 --decode > sa.json
+            if ! grep -q '"client_email"' sa.json; then
+              echo "Decoded file does not look like a service account JSON (missing client_email)."
+              exit 1
+            fi
+            echo "Decoded service account key to sa.json (runner-only)."
+
 
       - name: Run fetch_and_post.py (writes to Google Sheets)
         run: |
