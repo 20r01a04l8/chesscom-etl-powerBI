@@ -1,4 +1,4 @@
-# ChessAnalytics — fetch & post Chess.com monthly archives to Make → Google Sheets
+# ChessAnalytics — fetch & post Chess.com monthly archives to Github Actions → Google Sheets
 
 ## Purpose
 Daily GitHub Action fetcher that:
@@ -22,4 +22,6 @@ Daily GitHub Action fetcher that:
 
 ## Local testing
 Run locally:
+## Global Link
+https://app.powerbi.com/groups/me/reports/75e41030-7517-425a-829a-e0ec4a0e1f83/aa8a21904ee287c67090?experience=power-bi
 
