@@ -129,21 +129,23 @@ jobs:
           PY
 
       - name: Run fetch_and_post.py (writes to Google Sheets)
+        shell: bash
         run: |
+          echo "DEBUG: github.event.inputs.usernames='${{ github.event.inputs.usernames }}'"
+          echo "DEBUG: CHESS_USERNAMES='$CHESS_USERNAMES'"
+      
           if [ -n "${{ github.event.inputs.usernames }}" ]; then
+            echo "Using workflow input usernames"
             python fetch_and_post.py "${{ github.event.inputs.usernames }}"
           else
-            python fetch_and_post.py ""
+            echo "Using CHESS_USERNAMES from env"
+            python fetch_and_post.py
           fi
         env:
+          CHESS_USERNAMES: ${{ secrets.CHESS_USERNAMES }}
           GSPREAD_SA_JSON_PATH: ./sa.json
-          SHEET_ID: ${{ env.SHEET_ID }}
-          SHEET_NAME_PREFIX: ${{ env.SHEET_NAME_PREFIX }}
-          MAKE_USER_AGENT: ${{ env.MAKE_USER_AGENT }}
-          CHESS_REQUEST_DELAY: ${{ env.CHESS_REQUEST_DELAY }}
-          CHESS_MAX_RETRIES: ${{ env.CHESS_MAX_RETRIES }}
-          STATE_FILE: ${{ env.STATE_FILE }}
-          CHESS_USERNAMES: ${{ env.CHESS_USERNAMES }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+
 
       - name: Commit and push updated state.json and outputs (if changed)
         shell: bash
