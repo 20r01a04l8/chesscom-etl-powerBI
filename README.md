@@ -5,8 +5,7 @@ Daily GitHub Action fetcher that:
 - Polls Chess.com archive list for usernames,
 - Downloads new monthly archives,
 - Converts games to rows,
-- POSTS a single batched payload per archive to a Make webhook,
-- Make appends rows to Google Sheets in one batch and logs processed archives.
+  - appends rows to Google Sheets in one batch and logs processed archives.
 
 ## Setup (GitHub repo)
 1. Add files to your repo:
