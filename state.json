@@ -1,6 +1,6 @@
 {
   "konduvinay": {
-    "last_end_time": 1780152670,
+    "last_end_time": 1780411091,
     "processed_archives": [
       "https://api.chess.com/pub/player/konduvinay/games/2024/06",
       "https://api.chess.com/pub/player/konduvinay/games/2024/07",
@@ -19,7 +19,8 @@
       "https://api.chess.com/pub/player/konduvinay/games/2026/02",
       "https://api.chess.com/pub/player/konduvinay/games/2026/03",
       "https://api.chess.com/pub/player/konduvinay/games/2026/04",
-      "https://api.chess.com/pub/player/konduvinay/games/2026/05"
+      "https://api.chess.com/pub/player/konduvinay/games/2026/05",
+      "https://api.chess.com/pub/player/konduvinay/games/2026/06"
     ]
   }
 }
